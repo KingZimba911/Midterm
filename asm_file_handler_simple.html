@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>ASM File Handler</title>
+  <style>
+    body {
+      background-color: black;
+      color: lime;
+      font-family: Courier New, monospace;
+      padding: 20px;
+    }
+
+    h2 {
+      color: yellow;
+    }
+
+    #output {
+      background-color: #111;
+      border: 1px solid lime;
+      padding: 10px;
+      height: 350px;
+      overflow-y: scroll;
+      white-space: pre-wrap;
+      margin-bottom: 10px;
+    }
+
+    #inputArea {
+      display: flex;
+      gap: 8px;
+    }
+
+    #cmdInput {
+      flex: 1;
+      background: black;
+      color: lime;
+      border: 1px solid lime;
+      font-family: Courier New, monospace;
+      font-size: 14px;
+      padding: 5px;
+    }
+
+    button {
+      background: #222;
+      color: lime;
+      border: 1px solid lime;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-family: Courier New, monospace;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    #asmBox {
+      margin-top: 10px;
+      background: #0a0a0a;
+      border: 1px dashed #444;
+      padding: 8px;
+      color: #888;
+      font-size: 12px;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>ASM File Handler - DOS Simulator</h2>
+  <p style="color: gray;">Type a command below. Try: HELP, DIR, TYPE README.TXT</p>
+
+  <div id="output"></div>
+
+  <div id="inputArea">
+    <span style="color: lime;">C:\&gt;</span>
+    <input id="cmdInput" type="text" placeholder="enter command..." autocomplete="off" />
+    <button onclick="runCommand()">Run</button>
+  </div>
+
+  <div id="asmBox">; Assembly instructions will show here</div>
+
+<script>
+
+// ---- Virtual File System ----
+// Just a simple object acting as our "disk"
+
+var files = {
+  "README.TXT": "Welcome to ASM File Handler!\nType HELP to see all commands.\nThis is a DOS-style simulator.",
+  "NOTES.TXT": "Assembly Notes:\nINT 21h is used for DOS services.\nAH=09h prints a string.\nAH=4Ch exits the program.",
+  "HELLO.ASM": ".MODEL SMALL\n.STACK\n.DATA\n  msg DB 'Hello World$'\n.CODE\nMAIN:\n  MOV AH,09h\n  LEA DX, msg\n  INT 21h\n  MOV AH,4Ch\n  INT 21h\nEND MAIN"
+};
+
+var folders = ["DOCS", "SRC"];
+
+var currentDir = "C:\\";
+
+// ---- Show assembly code in the box ----
+function showASM(code) {
+  document.getElementById("asmBox").innerText = code;
+}
+
+// ---- Print to output screen ----
+function print(text) {
+  var box = document.getElementById("output");
+  box.innerText += text + "\n";
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---- Clear output ----
+function clearOutput() {
+  document.getElementById("output").innerText = "";
+}
+
+// ---- Run when user clicks Run or presses Enter ----
+function runCommand() {
+  var input = document.getElementById("cmdInput").value.trim();
+  if (input == "") return;
+
+  print(currentDir + "> " + input);
+  document.getElementById("cmdInput").value = "";
+
+  // Split input into command and arguments
+  var parts = input.split(" ");
+  var cmd = parts[0].toUpperCase();
+  var arg1 = parts[1] || "";
+  var arg2 = parts[2] || "";
+  var rest = parts.slice(1).join(" ");
+
+  // ---- 20 Commands ----
+
+  if (cmd == "HELP") {
+    // Command 1: HELP
+    showASM("; HELP - list all commands\nMOV AH, 09h\nLEA DX, helpMsg\nINT 21h");
+    print("-------- AVAILABLE COMMANDS --------");
+    print("1.  HELP              - show this list");
+    print("2.  DIR               - list files");
+    print("3.  TYPE <file>       - show file content");
+    print("4.  COPY <src> <dst>  - copy a file");
+    print("5.  DEL <file>        - delete a file");
+    print("6.  REN <old> <new>   - rename a file");
+    print("7.  EDIT <file> <txt> - create or edit file");
+    print("8.  APPEND <file> <t> - add text to file");
+    print("9.  FIND <word> <f>   - search word in file");
+    print("10. SIZE <file>       - show file size");
+    print("11. ATTR <file>       - show file attributes");
+    print("12. DATE <file>       - show file date");
+    print("13. MKDIR <name>      - make a folder");
+    print("14. RMDIR <name>      - remove a folder");
+    print("15. MOVE <f> <folder> - move file to folder");
+    print("16. TREE              - show folder structure");
+    print("17. CLS               - clear the screen");
+    print("18. PWD               - show current directory");
+    print("19. ECHO <text>       - print text");
+    print("20. COUNT             - count total files");
+    print("------------------------------------");
+  }
+
+  else if (cmd == "DIR") {
+    // Command 2: DIR - list files and folders
+    showASM("; DIR - find first file\nMOV AH, 4Eh\nLEA DX, wildcard\nINT 21h");
+    print("Directory of " + currentDir);
+    print("");
+
+    // show folders first
+    for (var i = 0; i < folders.length; i++) {
+      print("  <DIR>   " + folders[i]);
+    }
+
+    // show files
+    var fileList = Object.keys(files);
+    if (fileList.length == 0) {
+      print("  (no files)");
+    } else {
+      for (var i = 0; i < fileList.length; i++) {
+        var size = files[fileList[i]].length;
+        print("  " + fileList[i] + "   (" + size + " bytes)");
+      }
+    }
+
+    print("");
+    print(fileList.length + " file(s), " + folders.length + " folder(s)");
+  }
+
+  else if (cmd == "TYPE") {
+    // Command 3: TYPE - show file content
+    showASM("; TYPE - open and read file\nMOV AH, 3Dh  ; open file\nINT 21h\nMOV AH, 3Fh  ; read file\nINT 21h\nMOV AH, 3Eh  ; close file\nINT 21h");
+
+    if (arg1 == "") {
+      print("Usage: TYPE <filename>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      print("--- " + arg1.toUpperCase() + " ---");
+      print(files[arg1.toUpperCase()]);
+      print("--- END OF FILE ---");
+    }
+  }
+
+  else if (cmd == "COPY") {
+    // Command 4: COPY - copy a file
+    showASM("; COPY - read source, write destination\nMOV AH, 3Dh  ; open source\nINT 21h\nMOV AH, 3Fh  ; read\nINT 21h\nMOV AH, 3Ch  ; create new file\nINT 21h\nMOV AH, 40h  ; write\nINT 21h");
+
+    if (arg1 == "" || arg2 == "") {
+      print("Usage: COPY <source> <destination>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: Source file not found - " + arg1);
+    } else if (files[arg2.toUpperCase()] != undefined) {
+      print("Error: Destination already exists - " + arg2);
+    } else {
+      files[arg2.toUpperCase()] = files[arg1.toUpperCase()];
+      print("Copied " + arg1.toUpperCase() + " to " + arg2.toUpperCase());
+    }
+  }
+
+  else if (cmd == "DEL") {
+    // Command 5: DEL - delete a file
+    showASM("; DEL - delete file from disk\nMOV AH, 41h\nLEA DX, filename\nINT 21h");
+
+    if (arg1 == "") {
+      print("Usage: DEL <filename>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      delete files[arg1.toUpperCase()];
+      print("Deleted: " + arg1.toUpperCase());
+    }
+  }
+
+  else if (cmd == "REN") {
+    // Command 6: REN - rename a file
+    showASM("; REN - rename file\nMOV AH, 56h\nLEA DX, oldName\nLEA DI, newName\nINT 21h");
+
+    if (arg1 == "" || arg2 == "") {
+      print("Usage: REN <oldname> <newname>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      files[arg2.toUpperCase()] = files[arg1.toUpperCase()];
+      delete files[arg1.toUpperCase()];
+      print("Renamed " + arg1.toUpperCase() + " to " + arg2.toUpperCase());
+    }
+  }
+
+  else if (cmd == "EDIT") {
+    // Command 7: EDIT - create or overwrite file
+    showASM("; EDIT - create file and write content\nMOV AH, 3Ch  ; create file\nINT 21h\nMOV AH, 40h  ; write to file\nINT 21h\nMOV AH, 3Eh  ; close file\nINT 21h");
+
+    if (arg1 == "") {
+      print("Usage: EDIT <filename> <text>");
+    } else {
+      var content = parts.slice(2).join(" ");
+      files[arg1.toUpperCase()] = content;
+      print("Saved to " + arg1.toUpperCase() + " (" + content.length + " bytes)");
+    }
+  }
+
+  else if (cmd == "APPEND") {
+    // Command 8: APPEND - add text to end of file
+    showASM("; APPEND - seek to end then write\nMOV AH, 42h  ; seek\nMOV AL, 02h  ; from end\nINT 21h\nMOV AH, 40h  ; write\nINT 21h");
+
+    if (arg1 == "") {
+      print("Usage: APPEND <filename> <text>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      var addText = parts.slice(2).join(" ");
+      files[arg1.toUpperCase()] = files[arg1.toUpperCase()] + "\n" + addText;
+      print("Appended to " + arg1.toUpperCase());
+    }
+  }
+
+  else if (cmd == "FIND") {
+    // Command 9: FIND - search for a word in a file
+    showASM("; FIND - read file, scan for string\nMOV AH, 3Fh  ; read file\nINT 21h\nREPNZ SCASB  ; scan byte by byte");
+
+    if (arg1 == "" || arg2 == "") {
+      print("Usage: FIND <word> <filename>");
+    } else if (files[arg2.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg2);
+    } else {
+      var lines = files[arg2.toUpperCase()].split("\n");
+      var found = 0;
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].toUpperCase().indexOf(arg1.toUpperCase()) != -1) {
+          print("  Line " + (i + 1) + ": " + lines[i]);
+          found++;
+        }
+      }
+      if (found == 0) {
+        print('"' + arg1 + '" not found in ' + arg2.toUpperCase());
+      } else {
+        print(found + " match(es) found.");
+      }
+    }
+  }
+
+  else if (cmd == "SIZE") {
+    // Command 10: SIZE - show file size
+    showASM("; SIZE - seek to end to get file size\nMOV AH, 42h\nMOV AL, 02h  ; from end of file\nXOR CX, CX\nXOR DX, DX\nINT 21h  ; AX = file size");
+
+    if (arg1 == "") {
+      print("Usage: SIZE <filename>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      var bytes = files[arg1.toUpperCase()].length;
+      print("File: " + arg1.toUpperCase());
+      print("Size: " + bytes + " bytes");
+    }
+  }
+
+  else if (cmd == "ATTR") {
+    // Command 11: ATTR - show file attributes
+    showASM("; ATTR - get file attributes\nMOV AH, 43h\nMOV AL, 00h  ; get mode\nLEA DX, filename\nINT 21h  ; CX = attribute bits");
+
+    if (arg1 == "") {
+      print("Usage: ATTR <filename>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      print("File: " + arg1.toUpperCase());
+      print("Type    : FILE");
+      print("Archive : YES");
+      print("Hidden  : NO");
+      print("ReadOnly: NO");
+      print("System  : NO");
+    }
+  }
+
+  else if (cmd == "DATE") {
+    // Command 12: DATE - show file date (simulated)
+    showASM("; DATE - get file date and time stamp\nMOV AH, 57h\nMOV AL, 00h  ; get date/time\nMOV BX, handle\nINT 21h  ; CX=time, DX=date");
+
+    if (arg1 == "") {
+      print("Usage: DATE <filename>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else {
+      var today = new Date();
+      print("File: " + arg1.toUpperCase());
+      print("Date: " + today.toLocaleDateString());
+      print("Time: " + today.toLocaleTimeString());
+    }
+  }
+
+  else if (cmd == "MKDIR") {
+    // Command 13: MKDIR - make a new folder
+    showASM("; MKDIR - create directory\nMOV AH, 39h\nLEA DX, dirName\nINT 21h");
+
+    if (arg1 == "") {
+      print("Usage: MKDIR <foldername>");
+    } else if (folders.indexOf(arg1.toUpperCase()) != -1) {
+      print("Error: Folder already exists - " + arg1);
+    } else {
+      folders.push(arg1.toUpperCase());
+      print("Folder created: " + arg1.toUpperCase());
+    }
+  }
+
+  else if (cmd == "RMDIR") {
+    // Command 14: RMDIR - remove a folder
+    showASM("; RMDIR - remove directory\nMOV AH, 3Ah\nLEA DX, dirName\nINT 21h");
+
+    if (arg1 == "") {
+      print("Usage: RMDIR <foldername>");
+    } else if (folders.indexOf(arg1.toUpperCase()) == -1) {
+      print("Error: Folder not found - " + arg1);
+    } else {
+      folders.splice(folders.indexOf(arg1.toUpperCase()), 1);
+      print("Folder removed: " + arg1.toUpperCase());
+    }
+  }
+
+  else if (cmd == "MOVE") {
+    // Command 15: MOVE - move a file to a folder (simulated)
+    showASM("; MOVE - copy then delete original\nMOV AH, 3Dh  ; open source\nINT 21h\nMOV AH, 3Ch  ; create at dest\nINT 21h\nMOV AH, 41h  ; delete source\nINT 21h");
+
+    if (arg1 == "" || arg2 == "") {
+      print("Usage: MOVE <filename> <folder>");
+    } else if (files[arg1.toUpperCase()] == undefined) {
+      print("Error: File not found - " + arg1);
+    } else if (folders.indexOf(arg2.toUpperCase()) == -1) {
+      print("Error: Folder not found - " + arg2);
+    } else {
+      // simulate move by just removing the file (folder is virtual)
+      delete files[arg1.toUpperCase()];
+      print("Moved " + arg1.toUpperCase() + " to " + arg2.toUpperCase() + "\\");
+    }
+  }
+
+  else if (cmd == "TREE") {
+    // Command 16: TREE - show folder/file tree
+    showASM("; TREE - recursive directory listing\nMOV AH, 4Eh  ; find first\nINT 21h\nMOV AH, 4Fh  ; find next\nINT 21h");
+
+    print("C:\\");
+    for (var i = 0; i < folders.length; i++) {
+      print("  |- " + folders[i] + "\\");
+    }
+    var fileList = Object.keys(files);
+    for (var i = 0; i < fileList.length; i++) {
+      print("  |- " + fileList[i]);
+    }
+  }
+
+  else if (cmd == "CLS") {
+    // Command 17: CLS - clear screen
+    showASM("; CLS - clear the screen\nMOV AH, 06h\nMOV AL, 00h\nMOV BH, 07h\nXOR CX, CX\nMOV DX, 184Fh\nINT 10h  ; BIOS scroll");
+    clearOutput();
+    print("Screen cleared.");
+  }
+
+  else if (cmd == "PWD") {
+    // Command 18: PWD - print working directory
+    showASM("; PWD - get current directory\nMOV AH, 47h\nMOV DL, 00h  ; default drive\nLEA SI, buffer\nINT 21h");
+    print("Current directory: " + currentDir);
+  }
+
+  else if (cmd == "ECHO") {
+    // Command 19: ECHO - print text to screen
+    showASM("; ECHO - print string\nMOV AH, 09h\nLEA DX, message\nINT 21h");
+    if (rest == "") {
+      print("ECHO is on.");
+    } else {
+      print(rest);
+    }
+  }
+
+  else if (cmd == "COUNT") {
+    // Command 20: COUNT - count total files
+    showASM("; COUNT - count files using find first/next\nMOV AH, 4Eh  ; find first\nINT 21h\nXOR CX, CX   ; counter = 0\nINC CX       ; count++\nMOV AH, 4Fh  ; find next\nINT 21h");
+    var total = Object.keys(files).length;
+    print("Total files: " + total);
+    print("Total folders: " + folders.length);
+  }
+
+  else {
+    // Unknown command
+    showASM("; Unknown command\nMOV AH, 09h\nLEA DX, errMsg\nINT 21h");
+    print('"' + cmd + '" is not recognized. Type HELP for commands.');
+  }
+
+  print(""); // blank line after each command
+}
+
+// Allow pressing Enter to run command
+document.getElementById("cmdInput").addEventListener("keydown", function(e) {
+  if (e.key == "Enter") {
+    runCommand();
+  }
+});
+
+// Show welcome message on load
+print("ASM File Handler - DOS Simulator");
+print("Type HELP to see all 20 commands.");
+print("");
+
+</script>
+
+</body>
+</html>
